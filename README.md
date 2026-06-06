@@ -470,23 +470,23 @@ Diagnosis Result
 
 | Home Page | EDA |
 |------------|------------------|
-| ![Home](assets/home.png) | ![Prediction](assets/eda.png) |
+| ![Home](assets/home.jpg) | ![Prediction](assets/eda.jpg) |
 
 | model | metrics |
 |------------|------------------|
-| ![Home](assets/model.png) | ![Prediction](assets/metrics.png) |
+| ![Home](assets/model.jpg) | ![Prediction](assets/metrics.jpg) |
 
-| c |
+| model accuracy comparision before and after applying scaling |
 |------------|
-| ![Home](assets/c.png) |
+| ![Home](assets/c.jpg) |
 
-| ensemble | 
+| ensemble learning| 
 |------------|
-| ![Home](assets/ensenble.png) | 
+| ![Home](assets/ensenble.jpg) | 
 
 | new diagnosis | 
 |------------|
-| ![Home](assets/new.png) | 
+| ![Home](assets/new.jpg) | 
 
 
 ---
@@ -503,6 +503,4 @@ Diagnosis Result
 
 
 
-**Ragaa**
-
-Machine Learning Project on Breast Cancer Classification using Python and Scikit-Learn.
+Machine Learning Project on Breast Cancer Classification using Python and Scikit-Learn (*only for study purpose*)
