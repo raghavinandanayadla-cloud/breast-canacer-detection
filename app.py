@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
@@ -23,7 +22,6 @@ from sklearn.ensemble import (
 )
 from sklearn.svm import SVC, LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
-from imblearn.over_sampling import SMOTE
 import xgboost as xgb
 
 # ── Page config ────────────────────────────────────────────────────────────────
@@ -63,6 +61,28 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Dataset: Breast Cancer Wisconsin\nTask: Binary Classification\nClasses: Malignant / Benign")
 
+# ── Manual oversampling (replaces SMOTE, no external dependency) ───────────────
+def oversample(X, y, random_state=42):
+    """Simplified SMOTE-style oversampling using numpy only."""
+    classes, counts = np.unique(y, return_counts=True)
+    max_count = counts.max()
+    rng = np.random.default_rng(random_state)
+    X_parts, y_parts = [], []
+    for cls in classes:
+        idx = np.where(y == cls)[0]
+        X_cls = X[idx]
+        X_parts.append(X_cls)
+        y_parts.append(np.array([cls] * len(idx)))
+        deficit = max_count - len(idx)
+        if deficit > 0:
+            i1 = rng.integers(0, len(idx), size=deficit)
+            i2 = rng.integers(0, len(idx), size=deficit)
+            lam = rng.uniform(0, 1, size=(deficit, 1))
+            synthetic = X_cls[i1] * lam + X_cls[i2] * (1 - lam)
+            X_parts.append(synthetic)
+            y_parts.append(np.array([cls] * deficit))
+    return np.vstack(X_parts), np.concatenate(y_parts)
+
 # ── Data loading ───────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data(file=None):
@@ -86,12 +106,11 @@ def preprocess(_df):
     X_tr, X_te, y_tr, y_te = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=50
     )
-    scaler   = StandardScaler()
-    X_tr_sc  = scaler.fit_transform(X_tr)
-    X_te_sc  = scaler.transform(X_te)
+    scaler  = StandardScaler()
+    X_tr_sc = scaler.fit_transform(X_tr)
+    X_te_sc = scaler.transform(X_te)
 
-    smote = SMOTE(random_state=42)
-    X_res, y_res = smote.fit_resample(X_tr_sc, y_tr)
+    X_res, y_res = oversample(X_tr_sc, y_tr.values)
 
     le        = LabelEncoder()
     y_res_enc = le.fit_transform(y_res)
@@ -102,7 +121,7 @@ def preprocess(_df):
             X_res, y_res, y_res_enc, y_te_enc,
             scaler, le, feat_names)
 
-# ── Plotly helpers ─────────────────────────────────────────────────────────────
+# ── Plotly chart helpers ───────────────────────────────────────────────────────
 COLORS = {"M": "#c0392b", "B": "#27ae60"}
 
 def plotly_roc(y_true, y_prob, title, pos="M"):
@@ -110,15 +129,15 @@ def plotly_roc(y_true, y_prob, title, pos="M"):
     auc = roc_auc_score(yb, y_prob)
     fpr, tpr, _ = roc_curve(yb, y_prob)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines",
+    fig.add_trace(go.Scatter(x=list(fpr), y=list(tpr), mode="lines",
                              line=dict(color="#c0392b", width=2),
                              name=f"AUC = {auc:.3f}"))
-    fig.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines",
+    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
                              line=dict(color="grey", dash="dash", width=1),
                              showlegend=False))
     fig.update_layout(title=title, xaxis_title="False Positive Rate",
                       yaxis_title="True Positive Rate",
-                      height=350, margin=dict(t=40,b=40,l=40,r=20))
+                      height=350, margin=dict(t=40, b=40, l=40, r=20))
     return fig, auc
 
 def plotly_cm(y_true, y_pred, labels, title):
@@ -132,10 +151,10 @@ def plotly_cm(y_true, y_pred, labels, title):
     ))
     fig.update_layout(title=title, xaxis_title="Predicted",
                       yaxis_title="Actual",
-                      height=320, margin=dict(t=40,b=40,l=60,r=20))
+                      height=320, margin=dict(t=40, b=40, l=60, r=20))
     return fig
 
-# ── Header ─────────────────────────────────────────────────────────────────────
+# ── App header ─────────────────────────────────────────────────────────────────
 st.markdown('<div class="main-title">🩺 Breast Cancer Wisconsin – ML Dashboard</div>',
             unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Explore data · train models · compare performance · predict diagnoses</div>',
@@ -168,18 +187,17 @@ if page == "📊 Dataset Overview":
     ca, cb = st.columns(2)
     with ca:
         st.markdown("#### Column info")
-        info = pd.DataFrame({
+        st.dataframe(pd.DataFrame({
             "dtype":    df.dtypes.astype(str),
             "non-null": df.notnull().sum(),
             "nulls":    df.isnull().sum(),
-        })
-        st.dataframe(info, use_container_width=True)
+        }), use_container_width=True)
     with cb:
         st.markdown("#### Descriptive statistics")
         st.dataframe(df.describe().T.round(3), use_container_width=True)
 
     st.markdown("#### Class distribution")
-    vc = df["diagnosis"].value_counts().reset_index()
+    vc  = df["diagnosis"].value_counts().reset_index()
     vc.columns = ["Diagnosis", "Count"]
     vc["Label"] = vc["Diagnosis"].map({"B": "Benign (B)", "M": "Malignant (M)"})
     fig = px.bar(vc, x="Label", y="Count",
@@ -206,25 +224,25 @@ elif page == "📈 EDA & Visualization":
     with t1:
         feat = st.selectbox("Feature", feat_names)
         fig  = px.histogram(df, x=feat, color="diagnosis",
-                            color_discrete_map=COLORS,
-                            barmode="overlay", opacity=0.65,
-                            nbins=35, title=f"Distribution – {feat}",
+                            color_discrete_map=COLORS, barmode="overlay",
+                            opacity=0.65, nbins=35,
+                            title=f"Distribution – {feat}",
                             labels={"diagnosis": "Diagnosis"})
         fig.update_layout(height=380)
         st.plotly_chart(fig, use_container_width=True)
 
     with t2:
-        num_df  = df.select_dtypes(include=np.number)
-        top     = num_df.var().nlargest(15).index.tolist()
-        corr    = num_df[top].corr().round(2)
+        num_df = df.select_dtypes(include=np.number)
+        top    = num_df.var().nlargest(15).index.tolist()
+        corr   = num_df[top].corr().round(2)
         fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdYlGn",
-                        zmin=-1, zmax=1, title="Correlation Heatmap (top 15 features by variance)",
-                        aspect="auto")
+                        zmin=-1, zmax=1, aspect="auto",
+                        title="Correlation Heatmap (top 15 features by variance)")
         fig.update_layout(height=520)
         st.plotly_chart(fig, use_container_width=True)
 
     with t3:
-        feat_b = st.selectbox("Feature for box plot", feat_names, key="bp")
+        feat_b = st.selectbox("Feature", feat_names, key="bp")
         fig = px.box(df, x="diagnosis", y=feat_b,
                      color="diagnosis", color_discrete_map=COLORS,
                      title=f"Box Plot – {feat_b}",
@@ -248,14 +266,14 @@ elif page == "📈 EDA & Visualization":
 elif page == "🤖 Model Training":
     st.markdown('<div class="section-hdr">Model Training & Evaluation</div>', unsafe_allow_html=True)
     st.markdown("""<div class="info-box">
-        <b>Phase 1</b> – raw features, no scaling / SMOTE &nbsp;|&nbsp;
-        <b>Phase 2</b> – StandardScaler + SMOTE applied
+        <b>Phase 1</b> – raw features, no scaling / oversampling &nbsp;|&nbsp;
+        <b>Phase 2</b> – StandardScaler + oversampling applied
     </div>""", unsafe_allow_html=True)
 
     mdl_name = st.selectbox("Model", [
         "Logistic Regression", "Decision Tree", "Random Forest",
         "SVM – Linear", "SVM – RBF", "SVM – Polynomial", "KNN (k=5)"])
-    phase = st.radio("Phase", ["Before Scaling", "After Scaling + SMOTE"], horizontal=True)
+    phase = st.radio("Phase", ["Before Scaling", "After Scaling + Oversampling"], horizontal=True)
 
     @st.cache_data
     def run_model(name, phase):
@@ -264,14 +282,14 @@ elif page == "🤖 Model Training":
             ytr = y_tr.values; yte = y_te.values
         else:
             Xtr = X_res; Xte = X_te_sc
-            ytr = y_res.values; yte = y_te.values
+            ytr = y_res;  yte = y_te.values
 
         defs = {
             "Logistic Regression": LogisticRegression(random_state=50, solver="liblinear", max_iter=1000),
             "Decision Tree":       DecisionTreeClassifier(random_state=42),
             "Random Forest":       RandomForestClassifier(n_estimators=100, random_state=42),
             "SVM – Linear":        LinearSVC(max_iter=5000, random_state=42),
-            "SVM – RBF":           SVC(kernel="rbf", random_state=42, probability=True),
+            "SVM – RBF":           SVC(kernel="rbf",  random_state=42, probability=True),
             "SVM – Polynomial":    SVC(kernel="poly", random_state=42, probability=True),
             "KNN (k=5)":           KNeighborsClassifier(n_neighbors=5),
         }
@@ -282,27 +300,22 @@ elif page == "🤖 Model Training":
         return yp.tolist(), (yprob.tolist() if yprob is not None else None)
 
     with st.spinner("Training…"):
-        yp_list, yprob_list = run_model(mdl_name, phase)
+        yp_l, yprob_l = run_model(mdl_name, phase)
 
-    yp    = np.array(yp_list)
-    yprob = np.array(yprob_list) if yprob_list is not None else None
+    yp    = np.array(yp_l)
+    yprob = np.array(yprob_l) if yprob_l is not None else None
     yte   = y_te.values
 
-    acc  = accuracy_score(yte, yp)
-    prec = precision_score(yte, yp, pos_label="M", zero_division=0)
-    rec  = recall_score(yte, yp,    pos_label="M", zero_division=0)
-    f1   = f1_score(yte, yp,        pos_label="M", zero_division=0)
-
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Accuracy",  f"{acc:.3f}")
-    c2.metric("Precision", f"{prec:.3f}")
-    c3.metric("Recall",    f"{rec:.3f}")
-    c4.metric("F1-Score",  f"{f1:.3f}")
+    c1.metric("Accuracy",  f"{accuracy_score(yte, yp):.3f}")
+    c2.metric("Precision", f"{precision_score(yte, yp, pos_label='M', zero_division=0):.3f}")
+    c3.metric("Recall",    f"{recall_score(yte, yp,    pos_label='M', zero_division=0):.3f}")
+    c4.metric("F1-Score",  f"{f1_score(yte, yp,        pos_label='M', zero_division=0):.3f}")
 
     cl, cr = st.columns(2)
     with cl:
         st.markdown("#### Confusion Matrix")
-        st.plotly_chart(plotly_cm(yte, yp, ["B","M"], mdl_name), use_container_width=True)
+        st.plotly_chart(plotly_cm(yte, yp, ["B", "M"], mdl_name), use_container_width=True)
     with cr:
         if yprob is not None:
             st.markdown("#### ROC Curve")
@@ -310,7 +323,7 @@ elif page == "🤖 Model Training":
             st.plotly_chart(fig_roc, use_container_width=True)
             st.metric("ROC-AUC", f"{auc_val:.3f}")
         else:
-            st.info("ROC not available for LinearSVC (no probability output).")
+            st.info("ROC curve not available for LinearSVC (no probability output).")
 
     st.markdown("#### Classification Report")
     st.dataframe(
@@ -320,8 +333,8 @@ elif page == "🤖 Model Training":
     st.markdown('<div class="section-hdr">Comparison Table (notebook results)</div>',
                 unsafe_allow_html=True)
     cmp = pd.DataFrame({
-        "Model":           ["Logistic Regression","Decision Tree","Random Forest",
-                            "SVM (Linear)","SVM (RBF)","SVM (Poly)","KNN (k=5)"],
+        "Model":           ["Logistic Regression", "Decision Tree", "Random Forest",
+                            "SVM (Linear)", "SVM (RBF)", "SVM (Poly)", "KNN (k=5)"],
         "Accuracy Before": [0.938, 0.938, 0.965, 0.938, 0.622, 0.614, 0.754],
         "Accuracy After":  [0.980, 0.960, 0.970, 0.960, 0.970, 0.900, 0.960],
     })
@@ -344,9 +357,9 @@ elif page == "⚙️ Ensemble Methods":
         rf  = RandomForestClassifier(n_estimators=100, random_state=42)
         svm = SVC(kernel="rbf", random_state=42, probability=True)
 
-        use_enc = name == "XGBoost"
-        ytr = y_res_enc  if use_enc else y_res.values
-        yte = y_te_enc   if use_enc else y_te.values
+        use_enc = (name == "XGBoost")
+        ytr = y_res_enc if use_enc else y_res
+        yte = y_te_enc  if use_enc else y_te.values
 
         ensembles = {
             "Bagging":     BaggingClassifier(
@@ -359,10 +372,10 @@ elif page == "⚙️ Ensemble Methods":
                                objective="binary:logistic",
                                eval_metric="logloss", random_state=42),
             "Soft Voting": VotingClassifier(
-                               estimators=[("lr",lr),("rf",rf),("svm",svm)],
+                               estimators=[("lr", lr), ("rf", rf), ("svm", svm)],
                                voting="soft"),
             "Hard Voting": VotingClassifier(
-                               estimators=[("lr",lr),("rf",rf),("svm",svm)],
+                               estimators=[("lr", lr), ("rf", rf), ("svm", svm)],
                                voting="hard"),
             "Stacking":    StackingClassifier(
                                estimators=[
@@ -387,18 +400,13 @@ elif page == "⚙️ Ensemble Methods":
     yte_e   = np.array(yte_e)
     pos     = 1 if use_enc else "M"
 
-    acc  = accuracy_score(yte_e, yp_e)
-    prec = precision_score(yte_e, yp_e, pos_label=pos, zero_division=0)
-    rec  = recall_score(yte_e, yp_e,    pos_label=pos, zero_division=0)
-    f1   = f1_score(yte_e, yp_e,        pos_label=pos, zero_division=0)
-
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Accuracy",  f"{acc:.3f}")
-    c2.metric("Precision", f"{prec:.3f}")
-    c3.metric("Recall",    f"{rec:.3f}")
-    c4.metric("F1-Score",  f"{f1:.3f}")
+    c1.metric("Accuracy",  f"{accuracy_score(yte_e, yp_e):.3f}")
+    c2.metric("Precision", f"{precision_score(yte_e, yp_e, pos_label=pos, zero_division=0):.3f}")
+    c3.metric("Recall",    f"{recall_score(yte_e, yp_e,    pos_label=pos, zero_division=0):.3f}")
+    c4.metric("F1-Score",  f"{f1_score(yte_e, yp_e,        pos_label=pos, zero_division=0):.3f}")
 
-    lab_map = ["0","1"] if use_enc else ["B","M"]
+    lab_map = ["0", "1"] if use_enc else ["B", "M"]
     cl, cr = st.columns(2)
     with cl:
         st.markdown("#### Confusion Matrix")
@@ -406,19 +414,19 @@ elif page == "⚙️ Ensemble Methods":
     with cr:
         if yprob_e is not None:
             st.markdown("#### ROC Curve")
-            yb  = yte_e if use_enc else (yte_e == "M").astype(int)
+            yb    = yte_e if use_enc else (yte_e == "M").astype(int)
             auc_e = roc_auc_score(yb, yprob_e)
             fpr, tpr, _ = roc_curve(yb, yprob_e)
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=fpr.tolist(), y=tpr.tolist(), mode="lines",
+            fig.add_trace(go.Scatter(x=list(fpr), y=list(tpr), mode="lines",
                                      line=dict(color="#c0392b", width=2),
                                      name=f"AUC = {auc_e:.3f}"))
-            fig.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines",
+            fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
                                      line=dict(color="grey", dash="dash", width=1),
                                      showlegend=False))
             fig.update_layout(title=f"ROC – {ens_name}",
                               xaxis_title="FPR", yaxis_title="TPR",
-                              height=350, margin=dict(t=40,b=40,l=40,r=20))
+                              height=350, margin=dict(t=40, b=40, l=40, r=20))
             st.plotly_chart(fig, use_container_width=True)
             st.metric("ROC-AUC", f"{auc_e:.3f}")
         else:
@@ -441,8 +449,8 @@ elif page == "🔬 Predict Diagnosis":
 
     @st.cache_data
     def get_pred_model(name):
-        use_enc = name == "XGBoost"
-        ytr = y_res_enc if use_enc else y_res.values
+        use_enc = (name == "XGBoost")
+        ytr = y_res_enc if use_enc else y_res
         models = {
             "Logistic Regression": LogisticRegression(random_state=50, solver="liblinear", max_iter=1000),
             "Random Forest":       RandomForestClassifier(n_estimators=100, random_state=42),
@@ -469,12 +477,10 @@ elif page == "🔬 Predict Diagnosis":
         cols = st.columns(3)
         for col, f in zip(cols, chunk):
             inp[f] = col.number_input(
-                f,
-                value=float(round(medians[f], 4)),
+                f, value=float(round(medians[f], 4)),
                 min_value=float(mins[f]),
                 max_value=float(maxs[f] * 2),
-                format="%.4f",
-                key=f"i_{f}")
+                format="%.4f", key=f"i_{f}")
 
     if st.button("🔬 Predict Diagnosis", use_container_width=True):
         arr    = np.array([[inp[f] for f in feat_names]])
@@ -496,24 +502,21 @@ elif page == "🔬 Predict Diagnosis":
           <p style="margin:6px 0 0">Confidence: <b>{conf*100:.1f}%</b></p>
         </div>""", unsafe_allow_html=True)
 
-        # Confidence gauge
         fig = go.Figure(go.Bar(
-            x=[conf, 1 - conf],
-            y=["Confidence", "Confidence"],
-            orientation="h",
+            x=[conf, 1 - conf], orientation="h",
             marker_color=[color, "#e0e0e0"],
-            text=[f"{conf*100:.1f}%", ""],
-            textposition="inside",
+            text=[f"{conf*100:.1f}%", ""], textposition="inside",
         ))
-        fig.update_layout(barmode="stack", height=100,
-                          margin=dict(t=10,b=10,l=10,r=10),
-                          xaxis=dict(range=[0,1], tickformat=".0%"),
-                          showlegend=False, yaxis=dict(showticklabels=False))
+        fig.update_layout(barmode="stack", height=90,
+                          margin=dict(t=10, b=10, l=10, r=10),
+                          xaxis=dict(range=[0, 1], tickformat=".0%"),
+                          showlegend=False,
+                          yaxis=dict(showticklabels=False))
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("#### Class Probabilities")
         if use_enc:
-            prob_df = pd.DataFrame({"Class": ["Benign","Malignant"],
+            prob_df = pd.DataFrame({"Class": ["Benign", "Malignant"],
                                     "Probability": [float(prob[0]), float(prob[1])]})
         else:
             cls_map = {c: ("Malignant" if c == "M" else "Benign") for c in pm.classes_}
