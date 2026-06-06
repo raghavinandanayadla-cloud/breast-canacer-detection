@@ -412,12 +412,91 @@ A curve closer to the top-left corner indicates better classification performanc
 
 ---
 
+---
+
+## Live Web Application
+
+A user-friendly web interface has been developed using **Streamlit** to make breast cancer prediction accessible without requiring programming knowledge.
+
+### Features
+
+- Interactive and responsive web interface
+- Real-time breast cancer prediction
+- Input all diagnostic features through a simple form
+- Instant classification as **Benign** or **Malignant**
+- Machine Learning model integration for accurate predictions
+- Easy deployment using Streamlit Cloud
+
+### Live Demo
+
+🚀 **Try the Application Here:**
+
+https://breast-cancer-detection9.streamlit.app/
+
+### Application Workflow
+
+1. Enter the diagnostic feature values.
+2. Click the **Predict** button.
+3. The trained machine learning model processes the inputs.
+4. The application displays the predicted diagnosis:
+   - **Benign (Non-Cancerous)**
+   - **Malignant (Cancerous)**
+
+### Technologies Used for Deployment
+
+- Streamlit
+- Python
+- Scikit-Learn
+- Pandas
+- NumPy
+
+### Deployment Architecture
+
+```text
+User Input
+     ↓
+Streamlit Interface
+     ↓
+Trained ML Model
+     ↓
+Prediction Engine
+     ↓
+Diagnosis Result
+```
+
+---
+
+## Screenshots
+
+| Home Page | EDA |
+|------------|------------------|
+| ![Home](assets/home.png) | ![Prediction](assets/eda.png) |
+
+| model | metrics |
+|------------|------------------|
+| ![Home](assets/model.png) | ![Prediction](assets/metrics.png) |
+
+| c |
+|------------|
+| ![Home](assets/c.png) |
+
+| ensemble | 
+|------------|
+| ![Home](assets/ensenble.png) | 
+
+| new diagnosis | 
+|------------|
+| ![Home](assets/new.png) | 
+
+
+---
+
+
 ## Future Improvements
 
 - Hyperparameter Tuning using Grid Search
 - Cross-Validation for more robust evaluation
 - Deep Learning Models (ANN/CNN)
-- Model Deployment using Streamlit or Flask
 - Explainable AI using SHAP and LIME
 
 ---
